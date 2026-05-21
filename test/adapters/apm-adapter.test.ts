@@ -39,7 +39,7 @@ suite('ApmAdapter', () => {
     mockRuntime = sandbox.createStubInstance(ApmRuntimeManager);
     mockRuntime.getStatus.resolves({ installed: true, version: '1.0.0' });
 
-    sandbox.stub(ApmRuntimeManager, 'getInstance').returns(mockRuntime as unknown as ApmRuntimeManager);
+    sandbox.stub(ApmRuntimeManager, 'getInstance').returns(mockRuntime);
 
     // Stub vscode authentication
     sandbox.stub(vscode.authentication, 'getSession').resolves(undefined);
