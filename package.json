@@ -755,7 +755,7 @@
     "@types/glob": "^8.1.0",
     "@types/js-yaml": "^4.0.9",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^20.11.0",
+    "@types/node": "^22.0.0",
     "@types/semver": "^7.5.6",
     "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.99.3",
@@ -791,6 +791,7 @@
     "webpack-cli": "^5.0.1"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^9.3.4",
     "@prompt-registry/collection-scripts": "workspace:^",
     "adm-zip": "^0.5.16",
     "ajv": "^8.17.1",
