@@ -1065,7 +1065,7 @@ export class MarketplaceViewProvider implements vscode.WebviewViewProvider {
         </div>`;
 
     const detailsSection = `
-    <div class="section" id="readme-section"${!bundle.readme ? ' style="display:none"' : ''}>
+    <div class="section" id="readme-section"${bundle.readme ? '' : ' style="display:none"'}>
         <h2>README</h2>
         <div class="details-content">
             ${bundle.readme ? this.getMarkdownRender(bundle.readme) : ''}

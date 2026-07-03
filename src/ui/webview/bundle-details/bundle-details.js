@@ -54,7 +54,7 @@
       var readmeContent = document.querySelector('.details-content');
       if (readmeContent) {
         readmeContent.innerHTML = message.readmeHtml;
-        var readmeSection = document.getElementById('readme-section');
+        var readmeSection = document.querySelector('#readme-section');
         if (readmeSection) {
           readmeSection.style.display = '';
         }
