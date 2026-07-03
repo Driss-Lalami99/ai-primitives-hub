@@ -310,16 +310,7 @@ export class RepositoryScopeService implements IScopeService {
     skillFile: string,
     skillId: string
   ): Promise<string[]> {
-    // skillFile may be a file path (e.g., "skills/my-skill/SKILL.md")
-    // Extract the skill directory similar to UserScopeService
-    const skillMatch = skillFile.match(/skills\/([^/]+)/);
-    if (!skillMatch) {
-      this.logger.warn(`[RepositoryScopeService] Invalid skill path format: ${skillFile}`);
-      return [];
-    }
-
-    const skillName = skillMatch[1];
-    const sourcePath = path.join(bundlePath, 'skills', skillName);
+    const sourcePath = path.join(bundlePath, path.dirname(skillFile));
 
     if (!fs.existsSync(sourcePath)) {
       this.logger.warn(`[RepositoryScopeService] Skill directory not found: ${sourcePath}`);

@@ -544,7 +544,7 @@ version: "1.0.0"
 prompts:
   - id: ${skillName}
     name: ${skillName}
-    file: skills/${skillName}
+    file: skills/${skillName}/SKILL.md
     type: skill`;
 
       fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);

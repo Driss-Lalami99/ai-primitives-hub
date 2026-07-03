@@ -362,17 +362,9 @@ export class UserScopeService implements IScopeService {
    */
   private async syncSkillFromBundle(bundleId: string, bundlePath: string, promptDef: any): Promise<void> {
     try {
-      // Extract skill name from the path (e.g., skills/my-skill/SKILL.md -> my-skill)
       const skillPath = promptDef.file;
-      const skillMatch = skillPath.match(/skills\/([^/]+)\/SKILL\.md/);
-
-      if (!skillMatch) {
-        this.logger.warn(`Invalid skill path: ${skillPath}`);
-        return;
-      }
-
-      const skillName = skillMatch[1];
-      const skillSourceDir = path.join(bundlePath, 'skills', skillName);
+      const skillName = path.basename(path.dirname(skillPath));
+      const skillSourceDir = path.join(bundlePath, path.dirname(skillPath));
 
       if (!fs.existsSync(skillSourceDir)) {
         this.logger.warn(`Skill directory not found: ${skillSourceDir}`);

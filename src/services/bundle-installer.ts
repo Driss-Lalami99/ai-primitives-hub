@@ -508,29 +508,6 @@ export class BundleInstaller {
   }
 
   /**
-   * Extract skill name from a skills bundle
-   * Looks for the first directory under skills/ in the extracted bundle
-   * @param extractDir
-   */
-  private async extractSkillNameFromBundle(extractDir: string): Promise<string> {
-    const skillsDir = path.join(extractDir, 'skills');
-
-    if (!fs.existsSync(skillsDir)) {
-      throw new Error('Skills directory not found in bundle');
-    }
-
-    const entries = await readdir(skillsDir, { withFileTypes: true });
-    const skillDirs = entries.filter((e) => e.isDirectory());
-
-    if (skillDirs.length === 0) {
-      throw new Error('No skill directories found in bundle');
-    }
-
-    // Return the first skill directory name
-    return skillDirs[0].name;
-  }
-
-  /**
    * Copy directory recursively
    * @param sourceDir
    * @param targetDir
@@ -775,9 +752,16 @@ export class BundleInstaller {
       let installDir: string;
 
       if (installSkillsToCopilotDir) {
-        // Skills bundles install directly to Copilot skills directory for user/workspace scopes
-        // Extract skill name from the bundle - look in skills/ directory
-        const skillName = await this.extractSkillNameFromBundle(extractDir);
+        // Skills bundles install directly to Copilot skills directory for user/workspace scopes.
+        // Derive the skill's source directory from the manifest file path so skills packaged
+        // under a non-standard directory (e.g. .github/skills/) are resolved correctly.
+        const skillEntry = (manifest.prompts || []).find((p) => p.type === 'skill');
+        const skillFile = skillEntry?.file;
+        if (!skillFile) {
+          throw new Error('No skill entry found in bundle manifest');
+        }
+        const skillDir = path.dirname(skillFile);
+        const skillName = path.basename(skillDir);
         const copilotScope = options.scope === 'workspace' ? 'workspace' : 'user';
         installDir = this.copilotSync.getCopilotSkillsDirectory(copilotScope);
         await ensureDirectory(installDir);
@@ -786,7 +770,7 @@ export class BundleInstaller {
         this.logger.debug(`[BundleInstaller] Skills bundle detected, installing to: ${installDir}`);
 
         // Copy skill files directly to ~/.copilot/skills/{skill-name}
-        const skillSourceDir = path.join(extractDir, 'skills', skillName);
+        const skillSourceDir = path.join(extractDir, skillDir);
         if (fs.existsSync(skillSourceDir)) {
           // Check for existing skill using checkPathExists to detect broken symlinks
           const existingEntry = await checkPathExists(installDir);
@@ -807,7 +791,7 @@ export class BundleInstaller {
           }
           await this.copyDirectory(skillSourceDir, installDir);
         } else {
-          throw new Error(`Skill directory not found in bundle: skills/${skillName}`);
+          throw new Error(`Skill directory not found in bundle: ${skillDir}`);
         }
       } else {
         // Step 5: Get installation directory (standard bundles)

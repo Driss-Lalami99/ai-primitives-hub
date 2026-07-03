@@ -5,9 +5,14 @@
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import AdmZip from 'adm-zip';
+import * as sinon from 'sinon';
 import {
   BundleInstaller,
 } from '../../src/services/bundle-installer';
+import {
+  UserScopeService,
+} from '../../src/services/user-scope-service';
 import {
   Bundle,
   InstallOptions,
@@ -59,6 +64,7 @@ suite('BundleInstaller', () => {
   });
 
   teardown(() => {
+    sinon.restore();
     // Cleanup temp directories
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -315,6 +321,58 @@ suite('BundleInstaller', () => {
 
       // Should not throw even if path doesn't exist
       await installer.uninstallSkillSymlink(mockInstalled);
+    });
+  });
+
+  suite('installFromBuffer - skills bundle with non-standard source directory', () => {
+    /**
+     * Build a skills bundle ZIP where the skill lives under a non-standard directory
+     * and the manifest file field points at its real location.
+     * @param skillId
+     * @param skillDirPrefix directory inside the bundle that holds the skill (e.g. .github/skills)
+     */
+    const buildSkillsZip = (skillId: string, skillDirPrefix: string): Buffer => {
+      const zip = new AdmZip();
+      const skillFile = `${skillDirPrefix}/${skillId}/SKILL.md`;
+      const manifest = {
+        id: 'nonstandard-skill-bundle',
+        version: '1.0.0',
+        name: 'Non-standard Skill Bundle',
+        prompts: [
+          {
+            id: skillId,
+            name: skillId,
+            description: 'Skill under a non-standard directory',
+            file: skillFile,
+            type: 'skill'
+          }
+        ]
+      };
+      zip.addFile('deployment-manifest.yml', Buffer.from(JSON.stringify(manifest), 'utf8'));
+      zip.addFile(skillFile, Buffer.from('# Skill\n', 'utf8'));
+      zip.addFile(`${skillDirPrefix}/${skillId}/helper.sh`, Buffer.from('echo hi\n', 'utf8'));
+      return zip.toBuffer();
+    };
+
+    test('installs skill from the manifest path, not a hardcoded skills/ directory', async () => {
+      const skillId = 'nevio-deployment-automation';
+      const copilotSkillsDir = path.join(tempDir, 'copilot-skills');
+      fs.mkdirSync(copilotSkillsDir, { recursive: true });
+
+      // Redirect the copilot skills directory into the temp dir so we don't touch ~/.copilot
+      sinon.stub(UserScopeService.prototype, 'getCopilotSkillsDirectory').returns(copilotSkillsDir);
+
+      const bundle: Bundle = { ...mockBundle, id: 'nonstandard-skill-bundle' };
+      const zipBuffer = buildSkillsZip(skillId, '.github/skills');
+      const options: InstallOptions = { scope: 'user', force: false };
+
+      const installed = await installer.installFromBuffer(bundle, zipBuffer, options, 'skills');
+
+      const installedSkillDir = path.join(copilotSkillsDir, skillId);
+      assert.ok(fs.existsSync(installedSkillDir), 'Skill directory should be installed');
+      assert.ok(fs.existsSync(path.join(installedSkillDir, 'SKILL.md')), 'SKILL.md should be copied');
+      assert.ok(fs.existsSync(path.join(installedSkillDir, 'helper.sh')), 'helper.sh should be copied');
+      assert.strictEqual(installed.installPath, installedSkillDir);
     });
   });
 });

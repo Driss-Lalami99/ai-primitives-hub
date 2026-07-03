@@ -7,6 +7,8 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import AdmZip from 'adm-zip';
+import * as yaml from 'js-yaml';
 import * as sinon from 'sinon';
 import {
   LocalSkillsAdapter,
@@ -400,6 +402,47 @@ Instructions for ${name}
       // Verify it's a valid ZIP (starts with PK signature)
       assert.strictEqual(zipBuffer[0], 0x50); // 'P'
       assert.strictEqual(zipBuffer[1], 0x4B); // 'K'
+    });
+
+    test('manifest file field should match the skill SKILL.md path inside the ZIP', async () => {
+      // Regression: the generated manifest declared file: "SKILL.md" while the ZIP stores
+      // the skill under skills/<id>/SKILL.md, so downstream sync (which resolves the source
+      // from the manifest file path) silently skipped local skills.
+      createSkill('my-local-skill', {
+        description: 'Local skill for manifest check',
+        additionalFiles: ['helper.md']
+      });
+
+      const source: RegistrySource = {
+        id: 'test-local-skills',
+        name: 'Test Local Skills',
+        type: 'local-skills',
+        url: tempDir,
+        enabled: true,
+        priority: 1
+      };
+
+      const adapter = new LocalSkillsAdapter(source);
+      const bundles = await adapter.fetchBundles();
+      const zipBuffer = await adapter.downloadBundle(bundles[0]);
+
+      const zip = new AdmZip(zipBuffer);
+      const manifestEntry = zip.getEntry('deployment-manifest.yml');
+      assert.ok(manifestEntry, 'ZIP should contain deployment-manifest.yml');
+
+      const manifest = yaml.load(manifestEntry.getData().toString('utf8')) as any;
+      const skillFile = manifest.prompts[0].file;
+
+      // The declared file path must point at a real entry inside the ZIP.
+      assert.ok(
+        zip.getEntry(skillFile),
+        `manifest file path "${skillFile}" should exist inside the ZIP`
+      );
+      assert.strictEqual(
+        skillFile,
+        'skills/my-local-skill/SKILL.md',
+        'manifest file should point at skills/<id>/SKILL.md matching the ZIP layout'
+      );
     });
 
     test('should throw error for non-existent skill', async () => {

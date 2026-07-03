@@ -10,7 +10,9 @@
 
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import * as sinon from 'sinon';
 import {
   UserScopeService,
 } from '../../src/services/user-scope-service';
@@ -155,6 +157,101 @@ prompts: []
       } catch (error: any) {
         assert.ok(error.message, 'Should provide error message');
         assert.ok(error.message.length > 0, 'Error message should not be empty');
+      }
+    });
+  });
+
+  suite('syncBundle - skill with non-standard path', () => {
+    let sandbox: sinon.SinonSandbox;
+    let skillBundlePath: string;
+    let syncSkillSpy: sinon.SinonSpy;
+
+    setup(() => {
+      sandbox = sinon.createSandbox();
+
+      // Create a bundle that mimics a GitHub release where the skill lives
+      // under .github/skills/ instead of the standard skills/ root path.
+      skillBundlePath = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-bundle-'));
+      const skillDir = path.join(skillBundlePath, '.github', 'skills', 'nevio-deployment-automation');
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: Deployment Automation\ndescription: Test\n---\n# Skill');
+      fs.writeFileSync(path.join(skillDir, 'helper.sh'), '#!/bin/bash\necho hello');
+
+      const manifest = {
+        id: 'test-skills-bundle',
+        version: '1.0.0',
+        name: 'Test Skills Bundle',
+        prompts: [
+          {
+            id: 'nevio-deployment-automation',
+            name: 'Deployment Automation',
+            file: '.github/skills/nevio-deployment-automation/SKILL.md',
+            type: 'skill'
+          }
+        ]
+      };
+      fs.writeFileSync(
+        path.join(skillBundlePath, 'deployment-manifest.yml'),
+        JSON.stringify(manifest)
+      );
+
+      // Spy on the public syncSkill so we can assert its arguments without writing to ~/.copilot/skills
+      syncSkillSpy = sandbox.stub(service, 'syncSkill').resolves();
+    });
+
+    teardown(() => {
+      sandbox.restore();
+      fs.rmSync(skillBundlePath, { recursive: true, force: true });
+    });
+
+    test('should sync skill when file path has .github/skills prefix', async () => {
+      await service.syncBundle('test-skills-bundle', skillBundlePath);
+
+      assert.ok(syncSkillSpy.calledOnce, 'syncSkill should have been called once');
+
+      const [skillName, sourceDir] = syncSkillSpy.firstCall.args;
+      assert.strictEqual(skillName, 'nevio-deployment-automation',
+        'skill name should be extracted correctly from the path');
+      assert.strictEqual(sourceDir, path.join(skillBundlePath, '.github', 'skills', 'nevio-deployment-automation'),
+        'sourceDir should point to the actual skill location in the bundle, not a hardcoded skills/ prefix');
+    });
+
+    test('should still sync skill when file path has standard skills/ prefix', async () => {
+      // Create a second bundle with the standard path layout
+      const standardBundlePath = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-bundle-standard-'));
+      const skillDir = path.join(standardBundlePath, 'skills', 'pr-review');
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: PR Review\ndescription: Test\n---\n# Skill');
+
+      const manifest = {
+        id: 'test-standard-bundle',
+        version: '1.0.0',
+        name: 'Test Standard Bundle',
+        prompts: [
+          {
+            id: 'pr-review',
+            name: 'PR Review',
+            file: 'skills/pr-review/SKILL.md',
+            type: 'skill'
+          }
+        ]
+      };
+      fs.writeFileSync(
+        path.join(standardBundlePath, 'deployment-manifest.yml'),
+        JSON.stringify(manifest)
+      );
+
+      try {
+        await service.syncBundle('test-standard-bundle', standardBundlePath);
+
+        assert.ok(syncSkillSpy.calledOnce, 'syncSkill should have been called once');
+
+        const [skillName, sourceDir] = syncSkillSpy.firstCall.args;
+        assert.strictEqual(skillName, 'pr-review', 'skill name should be correct');
+        assert.strictEqual(sourceDir, path.join(standardBundlePath, 'skills', 'pr-review'),
+          'sourceDir should point to skills/pr-review in the bundle');
+      } finally {
+        fs.rmSync(standardBundlePath, { recursive: true, force: true });
       }
     });
   });

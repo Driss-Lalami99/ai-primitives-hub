@@ -742,13 +742,14 @@ suite('RepositoryScopeService', () => {
         fs.writeFileSync(filePath, file.content);
       }
 
-      // Create deployment manifest with skill entry
+      // Create deployment manifest with skill entry. The file field points at the
+      // skill's SKILL.md, matching what real adapters emit (skills/<name>/SKILL.md).
       const manifest = `id: ${bundleId}
 version: "1.0.0"
 prompts:
   - id: ${skillName}
     name: ${skillName}
-    file: skills/${skillName}
+    file: skills/${skillName}/SKILL.md
     type: skill`;
 
       fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);
@@ -904,7 +905,7 @@ prompts:
     type: prompt
   - id: my-skill
     name: My Skill
-    file: skills/my-skill
+    file: skills/my-skill/SKILL.md
     type: skill`;
 
       fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);
@@ -962,6 +963,40 @@ prompts:
       assert.ok(fs.existsSync(path.join(targetSkillDir, 'SKILL.md')), 'SKILL.md should be copied');
       assert.ok(fs.existsSync(path.join(targetSkillDir, 'resources', 'helper.md')), 'resources/helper.md should be copied');
     });
+
+    test('should sync skill packaged under a non-standard directory (.github/skills)', async () => {
+      // Regression for the PR 313 bug class at repository scope: the source directory
+      // must be derived from the manifest file path, not a hardcoded skills/ prefix.
+      const bundleId = 'skill-bundle-github-prefix';
+      const skillName = 'nevio-deployment-automation';
+      const bundlePath = path.join(tempDir, 'bundles', bundleId);
+      fs.mkdirSync(bundlePath, { recursive: true });
+
+      // Skill lives under .github/skills/ instead of the standard skills/ root path
+      const skillDir = path.join(bundlePath, '.github', 'skills', skillName);
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Deployment Automation');
+      fs.writeFileSync(path.join(skillDir, 'helper.sh'), '#!/bin/bash\necho hello');
+
+      const manifest = `id: ${bundleId}
+version: "1.0.0"
+prompts:
+  - id: ${skillName}
+    name: ${skillName}
+    file: .github/skills/${skillName}/SKILL.md
+    type: skill`;
+
+      fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);
+
+      mockStorage.getInstalledBundle.resolves(createMockInstalledBundle(bundleId, 'commit'));
+
+      await service.syncBundle(bundleId, bundlePath);
+
+      const targetSkillDir = path.join(workspaceRoot, '.github', 'skills', skillName);
+      assert.ok(fs.existsSync(targetSkillDir), 'Skill directory should be created');
+      assert.ok(fs.existsSync(path.join(targetSkillDir, 'SKILL.md')), 'SKILL.md should be copied');
+      assert.ok(fs.existsSync(path.join(targetSkillDir, 'helper.sh')), 'helper.sh should be copied');
+    });
   });
 
   suite('unsyncBundle - Skills Directory Removal', () => {
@@ -995,7 +1030,7 @@ version: "1.0.0"
 prompts:
   - id: ${skillName}
     name: ${skillName}
-    file: skills/${skillName}
+    file: skills/${skillName}/SKILL.md
     type: skill`;
 
       fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);
@@ -1130,7 +1165,7 @@ version: "1.0.0"
 prompts:
   - id: ${skillName}
     name: ${skillName}
-    file: skills/${skillName}
+    file: skills/${skillName}/SKILL.md
     type: skill`;
 
       fs.writeFileSync(path.join(bundlePath, 'deployment-manifest.yml'), manifest);
