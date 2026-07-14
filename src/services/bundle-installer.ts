@@ -586,7 +586,8 @@ export class BundleInstaller {
             overwrite: false,
             skipOnConflict: false,
             createBackup: true
-          }
+          },
+          manifest.mcpInputs
         );
 
         if (workspaceInstallationResult.success) {
@@ -612,7 +613,8 @@ export class BundleInstaller {
           overwrite: false,
           skipOnConflict: false,
           createBackup: true
-        }
+        },
+        manifest.mcpInputs
       );
 
       if (result.success) {

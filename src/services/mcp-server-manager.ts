@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'fs-extra';
 import {
   McpConfiguration,
+  McpInputDefinition,
   McpInstallOptions,
   McpInstallResult,
   McpServersManifest,
@@ -356,7 +357,8 @@ export class McpServerManager {
     bundleVersion: string,
     bundlePath: string,
     serversManifest: McpServersManifest,
-    options: McpInstallOptions
+    options: McpInstallOptions,
+    inputsManifest?: McpInputDefinition[]
   ): Promise<McpInstallResult> {
     const result: McpInstallResult = {
       success: false,
@@ -406,7 +408,8 @@ export class McpServerManager {
       const mergeResult = await this.configService.mergeServers(
         existingConfig,
         serversToInstall,
-        options
+        options,
+        inputsManifest
       );
 
       result.warnings?.push(...mergeResult.warnings);
@@ -489,13 +492,15 @@ export class McpServerManager {
    * @param workspaceRoot - Path to workspace root
    * @param serversManifest - MCP servers to install
    * @param options - Installation options including commitMode
+   * @param inputsManifest
    */
   public async installServersToWorkspace(
     bundleId: string,
     bundleVersion: string,
     workspaceRoot: string,
     serversManifest: McpServersManifest,
-    options: McpWorkspaceInstallOptions
+    options: McpWorkspaceInstallOptions,
+    inputsManifest?: McpInputDefinition[]
   ): Promise<McpInstallResult> {
     const result: McpInstallResult = {
       success: false,
@@ -567,7 +572,7 @@ export class McpServerManager {
       const mergedConfig: McpConfiguration = {
         servers: { ...existingConfig.servers, ...serversToInstall },
         tasks: existingConfig.tasks,
-        inputs: existingConfig.inputs
+        inputs: this.configService.mergeInputs(existingConfig.inputs, inputsManifest)
       };
 
       // Write config and tracking
@@ -628,7 +633,8 @@ export class McpServerManager {
       }
 
       if (removedServers.length > 0) {
-        await this.writeWorkspaceMcpConfig(workspaceRoot, config, true);
+        const cleanedConfig = this.configService.removeOrphanedInputs(config);
+        await this.writeWorkspaceMcpConfig(workspaceRoot, cleanedConfig, true);
         await this.writeWorkspaceTrackingMetadata(workspaceRoot, tracking);
         this.logger.info(`Removed ${removedServers.length} MCP servers for bundle ${bundleId} from workspace`);
       } else {

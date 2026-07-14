@@ -79,10 +79,19 @@ export interface McpTaskDefinition {
   description?: string;
 }
 
+export interface McpInputDefinition {
+  id: string;
+  type: 'promptString' | 'pickString' | 'command';
+  description?: string;
+  password?: boolean;
+  default?: string;
+  options?: string[];
+}
+
 export interface McpConfiguration {
   servers: Record<string, McpServerConfig>;
   tasks?: Record<string, McpTaskDefinition>;
-  inputs?: any[]; // Legacy field, preserved for compatibility
+  inputs?: McpInputDefinition[];
 }
 
 /**

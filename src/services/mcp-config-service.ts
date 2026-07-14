@@ -3,6 +3,7 @@ import * as jsonc from 'jsonc-parser';
 import {
   isRemoteServerConfig,
   McpConfiguration,
+  McpInputDefinition,
   McpInstallOptions,
   McpRemoteServerConfig,
   McpServerConfig,
@@ -299,15 +300,40 @@ export class McpConfigService {
     return { duplicatesDisabled, config };
   }
 
+  /**
+   * Merge new input definitions into existing ones, deduplicating by id.
+   * Existing inputs with the same id are preserved unchanged.
+   * @param existing - Current inputs array from mcp.json
+   * @param incoming - New inputs to add
+   */
+  public mergeInputs(
+    existing: McpInputDefinition[] | undefined,
+    incoming: McpInputDefinition[] | undefined
+  ): McpInputDefinition[] | undefined {
+    if (!incoming || incoming.length === 0) {
+      return existing;
+    }
+    const merged = existing ? [...existing] : [];
+    const existingIds = new Set(merged.map((i) => i.id));
+    for (const input of incoming) {
+      if (!existingIds.has(input.id)) {
+        merged.push(input);
+        existingIds.add(input.id);
+      }
+    }
+    return merged.length > 0 ? merged : undefined;
+  }
+
   public async mergeServers(
     existingConfig: McpConfiguration,
     newServers: Record<string, McpServerConfig>,
-    options: McpInstallOptions
+    options: McpInstallOptions,
+    newInputs?: McpInputDefinition[]
   ): Promise<{ config: McpConfiguration; conflicts: string[]; warnings: string[] }> {
     const result: McpConfiguration = {
       servers: { ...existingConfig.servers },
       tasks: existingConfig.tasks ? { ...existingConfig.tasks } : undefined,
-      inputs: existingConfig.inputs ? [...existingConfig.inputs] : undefined
+      inputs: this.mergeInputs(existingConfig.inputs, newInputs)
     };
     const conflicts: string[] = [];
     const warnings: string[] = [];
@@ -331,6 +357,60 @@ export class McpConfigService {
     return { config: result, conflicts, warnings };
   }
 
+  /**
+   * Collect all ${input:id} references across all server configurations.
+   * @param servers
+   */
+  // eslint-disable-next-line @typescript-eslint/member-ordering -- private method added after public ones, ordering is intentional
+  private collectInputReferences(servers: Record<string, McpServerConfig>): Set<string> {
+    const inputPattern = /\$\{input:([^}]+)\}/g;
+    const referenced = new Set<string>();
+
+    const scan = (value: string | undefined): void => {
+      if (!value) {
+        return;
+      }
+      let match: RegExpExecArray | null;
+      while ((match = inputPattern.exec(value)) !== null) {
+        referenced.add(match[1]);
+      }
+    };
+
+    for (const serverConfig of Object.values(servers)) {
+      if (isRemoteServerConfig(serverConfig)) {
+        scan(serverConfig.url);
+        if (serverConfig.headers) {
+          Object.values(serverConfig.headers).forEach((v) => scan(v));
+        }
+      } else {
+        scan(serverConfig.command);
+        serverConfig.args?.forEach((v) => scan(v));
+        if (serverConfig.env) {
+          Object.values(serverConfig.env).forEach((v) => scan(v));
+        }
+      }
+    }
+
+    return referenced;
+  }
+
+  /**
+   * Remove inputs that are no longer referenced by any remaining server.
+   * Inputs referenced by at least one server are kept, even across bundles.
+   * @param config
+   */
+  public removeOrphanedInputs(config: McpConfiguration): McpConfiguration {
+    if (!config.inputs || config.inputs.length === 0) {
+      return config;
+    }
+    const referenced = this.collectInputReferences(config.servers);
+    const filteredInputs = config.inputs.filter((input) => referenced.has(input.id));
+    return {
+      ...config,
+      inputs: filteredInputs.length > 0 ? filteredInputs : undefined
+    };
+  }
+
   public async removeServersForBundle(bundleId: string, scope: 'user' | 'workspace'): Promise<string[]> {
     const config = await this.readMcpConfig(scope);
     const tracking = await this.readTrackingMetadata(scope);
@@ -347,7 +427,8 @@ export class McpConfigService {
     }
 
     if (removedServers.length > 0) {
-      await this.writeMcpConfig(config, scope, true);
+      const cleanedConfig = this.removeOrphanedInputs(config);
+      await this.writeMcpConfig(cleanedConfig, scope, true);
       await this.writeTrackingMetadata(tracking, scope);
       this.logger.info(`Removed ${removedServers.length} MCP servers for bundle ${bundleId}`);
     }

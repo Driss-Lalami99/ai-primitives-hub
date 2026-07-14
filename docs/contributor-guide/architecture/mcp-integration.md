@@ -7,8 +7,8 @@ Bundles can include MCP (Model Context Protocol) servers that extend Copilot's c
 | Component | Responsibility |
 |-----------|---------------|
 | **BundleInstaller** | Calls MCP install/uninstall during bundle lifecycle |
-| **McpServerManager** | Orchestrates installation, naming, tracking |
-| **McpConfigService** | Reads/writes VS Code's `mcp.json` |
+| **McpServerManager** | Orchestrates installation, naming, tracking, input merging |
+| **McpConfigService** | Reads/writes VS Code's `mcp.json`, merges/cleans inputs |
 
 ## Installation Flow
 
@@ -16,9 +16,9 @@ Bundles can include MCP (Model Context Protocol) servers that extend Copilot's c
 graph TD
     A["Bundle Install"]
     B["BundleInstaller.installMcpServers()"]
-    C["McpServerManager.installServers()"]
-    D["• Add bundle prefix to name<br/>(prompt-registry:bundleId:server-name)<br/>• Substitute variables<br/>• Write to mcp.json<br/>• Create tracking metadata"]
-    E["MCP servers available to Copilot"]
+    C["McpServerManager.installServers() or\ninstallServersToWorkspace()"]
+    D["• Add bundle prefix to name\n(prompt-registry:bundleId:server-name)\n• Substitute variables\n• mergeInputs() — deduplicate by id\n• Write servers + inputs to mcp.json\n• Create tracking metadata"]
+    E["MCP servers + inputs available to Copilot"]
     
     A --> B
     B --> C
@@ -62,6 +62,66 @@ mcpServers:
 | `${bundleId}` | Bundle identifier |
 | `${bundleVersion}` | Bundle version |
 | `${env:VAR_NAME}` | Environment variable |
+| `${input:id}` | VS Code input prompt (defined in `mcp.inputs`) |
+
+## Input Definitions
+
+Collections can define `mcp.inputs` to declare secrets or configurable values that VS Code will prompt the user for. These follow the [VS Code `mcp.json` inputs spec](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
+
+### Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier, referenced as `${input:id}` in server config |
+| `type` | `promptString` \| `pickString` \| `command` | Input type |
+| `description` | string | Label shown to the user |
+| `password` | boolean | Mask the value (for secrets) |
+| `default` | string | Pre-filled default value |
+| `options` | string[] | Choices for `pickString` type |
+
+### Example
+
+```yaml
+mcp:
+  inputs:
+    - id: serviceToken
+      type: promptString
+      description: "Service access token (not stored)"
+      password: true
+    - id: serviceUser
+      type: promptString
+      description: "Service username"
+    - id: servicePassword
+      type: promptString
+      description: "Service password or app password"
+      password: true
+  items:
+    server-a:
+      type: stdio
+      command: podman
+      args:
+        - run
+        - -e
+        - "TOKEN=${input:serviceToken}"
+        - my-mcp-server-a:latest
+    server-b:
+      type: stdio
+      command: podman
+      args:
+        - run
+        - -e
+        - "USERNAME=${input:serviceUser}"
+        - -e
+        - "PASSWORD=${input:servicePassword}"
+        - my-mcp-server-b:latest
+```
+
+### Merge Behaviour
+
+When a collection is installed, its `mcp.inputs` are **merged** into the existing `mcp.json`:
+- Inputs are deduplicated by `id` — the **existing** definition takes priority over incoming ones
+- This allows multiple collections to share the same input without conflict
+- Inputs are added to the top-level `inputs` array of `mcp.json`
 
 ## Example
 
@@ -81,8 +141,11 @@ mcpServers:
 
 1. Read tracking metadata for bundle's servers
 2. Remove servers from `mcp.json`
-3. Update tracking metadata
-4. Atomic operations with backup/rollback
+3. Remove **orphaned inputs** — any `${input:id}` no longer referenced by any remaining server is removed from the `inputs` array
+4. Update tracking metadata
+5. Atomic operations with backup/rollback
+
+> **Shared inputs are preserved**: if another installed bundle's server still references an input, it is kept.
 
 ## Duplicate Detection Algorithm
 

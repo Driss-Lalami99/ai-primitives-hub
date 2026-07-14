@@ -235,6 +235,46 @@
             }
           },
           "additionalProperties": false
+        },
+        "inputs": {
+          "type": "array",
+          "description": "Input definitions for MCP server secrets or configurable values (follows VS Code mcp.json inputs spec)",
+          "items": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for this input, referenced in args/env as ${input:id}",
+                "pattern": "^[a-zA-Z0-9_-]+$",
+                "examples": ["apiToken", "bbUser", "ocToken"]
+              },
+              "type": {
+                "type": "string",
+                "description": "Input type",
+                "enum": ["promptString", "pickString", "command"]
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable description shown to the user"
+              },
+              "password": {
+                "type": "boolean",
+                "description": "If true, the input is masked (for secrets). Only applies to promptString.",
+                "default": false
+              },
+              "default": {
+                "type": "string",
+                "description": "Default value pre-filled in the prompt"
+              },
+              "options": {
+                "type": "array",
+                "description": "List of options for pickString type",
+                "items": { "type": "string" }
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
