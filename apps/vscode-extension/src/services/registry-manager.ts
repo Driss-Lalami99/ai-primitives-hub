@@ -842,6 +842,42 @@ export class RegistryManager {
   }
 
   /**
+   * Remap installed bundles from an old source to a new one.
+   * Updates lockfile entries (repository scope) and installation records
+   * (user/workspace scope) so consumers seamlessly track the replacement.
+   * @param oldSourceId - Source id being retired.
+   * @param newSourceId - Replacement source id.
+   */
+  public async remapBundleSource(oldSourceId: string, newSourceId: string): Promise<void> {
+    this.logger.info(`Remapping bundle source: ${oldSourceId} -> ${newSourceId}`);
+
+    const sources = await this.storage.getSources();
+    const newSource = sources.find((s) => s.id === newSourceId);
+    const newSourceDescriptor = newSource
+      ? { type: newSource.type, url: newSource.url, branch: newSource.config?.branch, collectionsPath: newSource.config?.collectionsPath }
+      : undefined;
+
+    // Remap lockfile entries (repository scope)
+    const workspaceRoot = getWorkspaceRoot();
+    if (workspaceRoot && newSourceDescriptor) {
+      const lockfileManager = LockfileManager.getInstance(workspaceRoot);
+      await lockfileManager.remapSourceId(oldSourceId, newSourceId, newSourceDescriptor);
+    }
+
+    // Remap user/workspace installation records
+    for (const scope of ['user', 'workspace'] as const) {
+      const bundles = await this.storage.getInstalledBundles(scope);
+      for (const bundle of bundles) {
+        if (bundle.sourceId === oldSourceId) {
+          await this.storage.recordInstallation({ ...bundle, sourceId: newSourceId });
+        }
+      }
+    }
+
+    this.logger.info(`Bundle source remap complete: ${oldSourceId} -> ${newSourceId}`);
+  }
+
+  /**
    * Update a source
    * @param sourceId
    * @param updates

@@ -58,14 +58,32 @@ export interface SourceOperations {
 /**
  * Source read/write operations needed to sync a hub's declared sources
  * into the registry: list existing sources to detect duplicates/updates
- * against, add genuinely new ones, and update ones that already came
- * from the same hub. Deliberately narrower than a full source-CRUD
- * port (no `removeSource`) since hub-source syncing never deletes.
+ * against, add genuinely new ones, update ones that already came from the
+ * same hub, and remove ones this hub previously contributed that have
+ * since disappeared from its config (e.g. a collection whose repository
+ * URL was renamed, which yields a new sourceId and would otherwise leave
+ * the old source lingering as a duplicate).
  */
 export interface HubSourceSync {
   listSources(): Promise<RegistrySource[]>;
   addSource(source: RegistrySource): Promise<void>;
   updateSource(sourceId: string, updates: Partial<RegistrySource>): Promise<void>;
+  removeSource(sourceId: string): Promise<void>;
+  /**
+   * Installed bundles across all scopes, used to guard orphan pruning so a
+   * source with still-installed consumers is preserved or remapped rather
+   * than deleted (which would strand those bundles in an unmanaged state —
+   * see `loadHubSources`).
+   */
+  listInstalledBundles(): Promise<InstalledBundle[]>;
+  /**
+   * Optional: remap installed bundles from an old source to a new one
+   * (e.g. after a collection URL rename). Updates lockfile entries and
+   * installation records so consumers seamlessly track the new source.
+   * When omitted, orphans with installed consumers are kept alive with a
+   * warning rather than remapped.
+   */
+  remapBundleSource?(oldSourceId: string, newSourceId: string): Promise<void>;
 }
 
 /**

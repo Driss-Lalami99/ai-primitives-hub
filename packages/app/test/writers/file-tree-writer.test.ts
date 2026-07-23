@@ -34,6 +34,13 @@ import {
   InMemoryFileSystem,
 } from '../helpers/in-memory-filesystem';
 
+/**
+ * Normalize path separators for cross-platform assertion.
+ * @param p - Path to normalize.
+ */
+const posix = (p: string): string => p.replace(/\\/g, '/');
+const posixAll = (ps: string[]): string[] => ps.map((p) => posix(p));
+
 describe('resolveLayout', () => {
   it('resolves vscode user scope layout from built-in defaults', () => {
     const target: Target = { name: 'test', type: 'vscode', scope: 'user', path: '/custom/path' };
@@ -128,7 +135,7 @@ describe('FileTreeTargetWriter', () => {
 
     const result = await writer.write(target, files);
 
-    expect(result.written).toContain('/out/prompts/test.md');
+    expect(posixAll(result.written)).toContain('/out/prompts/test.md');
     expect(result.skipped).toEqual([]);
     expect(await fs.readFile('/out/prompts/test.md')).toBe('# Test');
   });
@@ -169,7 +176,7 @@ describe('FileTreeTargetWriter', () => {
 
     const result = await writer.write(restrictedTarget, files);
 
-    expect(result.written).toContain('/out/skills/my-skill/SKILL.md');
+    expect(posixAll(result.written)).toContain('/out/skills/my-skill/SKILL.md');
     expect(result.skipped).toContain('prompts/test.md');
   });
 
@@ -238,7 +245,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.github/prompts/my-prompt.prompt.md']);
+    expect(posixAll(result.written)).toEqual(['/ws/.github/prompts/my-prompt.prompt.md']);
     expect(result.skipped).toEqual([]);
     expect(await fs.readFile('/ws/.github/prompts/my-prompt.prompt.md')).toBe('# Hello');
   });
@@ -255,7 +262,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.github/instructions/my-instructions.instructions.md']);
+    expect(posixAll(result.written)).toEqual(['/ws/.github/instructions/my-instructions.instructions.md']);
   });
 
   it('routes chatmode items alongside agents', async () => {
@@ -270,7 +277,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.github/agents/my-mode.chatmode.md']);
+    expect(posixAll(result.written)).toEqual(['/ws/.github/agents/my-mode.chatmode.md']);
   });
 
   it('routes agent items to the agents/ directory', async () => {
@@ -285,7 +292,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.github/agents/my-agent.agent.md']);
+    expect(posixAll(result.written)).toEqual(['/ws/.github/agents/my-agent.agent.md']);
   });
 
   it('skips items whose kind is excluded by target.allowedKinds', async () => {
@@ -318,7 +325,7 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(windsurfTarget, files, items);
 
-    expect(result.written).toEqual(['/ws/.windsurf/agents/my-agent.agent.md']);
+    expect(posixAll(result.written)).toEqual(['/ws/.windsurf/agents/my-agent.agent.md']);
     expect(result.skipped).toEqual([]);
   });
 
@@ -366,8 +373,8 @@ describe('FileTreeTargetWriter.writeManifestItems', () => {
 
     const result = await writer.writeManifestItems(repoTarget, files, items);
 
-    expect(result.written).toContain('/ws/.github/skills/my-skill/SKILL.md');
-    expect(result.written).toContain('/ws/.github/skills/my-skill/scripts/run.sh');
+    expect(posixAll(result.written)).toContain('/ws/.github/skills/my-skill/SKILL.md');
+    expect(posixAll(result.written)).toContain('/ws/.github/skills/my-skill/scripts/run.sh');
     expect(result.skipped).toEqual([]);
     expect(await fs.readFile('/ws/.github/skills/my-skill/SKILL.md')).toBe('# Skill');
     expect(await fs.readFile('/ws/.github/skills/my-skill/scripts/run.sh')).toBe('#!/bin/sh');

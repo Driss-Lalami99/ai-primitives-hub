@@ -563,7 +563,10 @@ export class HubManager {
         {
           listSources: () => this.registryManager.listSources(),
           addSource: (source) => this.registryManager.addSource(source),
-          updateSource: (sourceId, updates) => this.registryManager.updateSource(sourceId, updates)
+          updateSource: (sourceId, updates) => this.registryManager.updateSource(sourceId, updates),
+          removeSource: (sourceId) => this.registryManager.removeSource(sourceId),
+          listInstalledBundles: () => this.registryManager.listInstalledBundles(),
+          remapBundleSource: (oldSourceId, newSourceId) => this.registryManager.remapBundleSource(oldSourceId, newSourceId)
         },
         this.translateLogEvent
       );
